@@ -1,0 +1,7 @@
+{
+  "name": "Lê Xuân Nước Classroom Manager",
+  "description": "Hệ thống quản lý lớp học chuyên nghiệp với tính năng điểm danh, quản lý học phí và báo cáo AI.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
