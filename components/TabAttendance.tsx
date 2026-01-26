@@ -22,12 +22,6 @@ const TabAttendance: React.FC<TabAttendanceProps> = ({ students, onRefresh }) =>
 
   const today = new Date().toLocaleDateString('vi-VN');
 
-  // Lấy danh sách các nhóm thực sự có học sinh để hiển thị trong bộ lọc
-  const availableGrades = useMemo(() => {
-    const grades = Array.from(new Set(students.map(s => String(s.grade)))).filter(g => g !== "");
-    return grades.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  }, [students]);
-
   // Today's Attendance Logic
   const toggleAbsentToday = (stt: number) => {
     setAbsentStudentsToday(prev => 
@@ -142,7 +136,7 @@ const TabAttendance: React.FC<TabAttendanceProps> = ({ students, onRefresh }) =>
                 onChange={(e) => setFilterGrade(e.target.value)}
               >
                 <option value="all">TẤT CẢ</option>
-                {availableGrades.map(g => <option key={g} value={g}>NHÓM {g}</option>)}
+                {GRADES.map(g => <option key={g} value={g}>NHÓM {g}</option>)}
               </select>
             </div>
           )}

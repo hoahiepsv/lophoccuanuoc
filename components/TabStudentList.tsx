@@ -15,12 +15,6 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [viewDate, setViewDate] = useState(new Date());
 
-  // Lấy danh sách các nhóm thực sự có học sinh để hiển thị trong bộ lọc
-  const availableGrades = useMemo(() => {
-    const grades = Array.from(new Set(students.map(s => String(s.grade)))).filter(g => g !== "");
-    return grades.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  }, [students]);
-
   const filteredStudents = useMemo(() => {
     let result = [...students];
     if (filterGrade !== 'all') {
@@ -134,6 +128,29 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
     }
   };
 
+  const getAttendedCount = (s: Student) => {
+    try {
+      const schedule = JSON.parse(s.schedule || '[]');
+      const attendance = JSON.parse(s.attendance || '[]');
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+
+      // Tính số buổi trong lịch tính đến hiện tại (định dạng YYYY-MM-DD)
+      const scheduledUntilNow = schedule.filter((d: string) => new Date(d) <= today).length;
+      
+      // Tính số buổi vắng (định dạng DD/MM/YYYY)
+      const absentsUntilNow = attendance.filter((d: string) => {
+        const [day, month, year] = d.split('/').map(Number);
+        const date = new Date(year, month - 1, day);
+        return date <= today;
+      }).length;
+
+      return Math.max(0, scheduledUntilNow - absentsUntilNow);
+    } catch (e) {
+      return 0;
+    }
+  };
+
   const calendarData = useMemo(() => {
     const year = viewDate.getFullYear();
     const month = viewDate.getMonth();
@@ -185,7 +202,7 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
             onChange={(e) => setFilterGrade(e.target.value)}
           >
             <option value="all">TẤT CẢ NHÓM</option>
-            {availableGrades.map(g => <option key={g} value={g}>NHÓM {g}</option>)}
+            {GRADES.map(g => <option key={g} value={g}>NHÓM {g}</option>)}
           </select>
         </div>
       </div>
@@ -200,6 +217,7 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
               <th className="px-4 py-4 text-left">Lớp</th>
               <th className="px-4 py-4 text-left">SĐT Phụ Huynh</th>
               <th className="px-4 py-4 text-left">Ngày BĐ</th>
+              <th className="px-4 py-4 text-center">Số buổi đã học</th>
               <th className="px-4 py-4 text-center">Số buổi vắng</th>
               <th className="px-4 py-4 text-center">Hành động</th>
             </tr>
@@ -221,6 +239,11 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
                 </td>
                 <td className="px-4 py-4 text-xs font-bold text-gray-500">{s.startDate}</td>
                 <td className="px-4 py-4 text-center">
+                  <span className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-lg text-xs font-black border border-emerald-100">
+                    {getAttendedCount(s)}
+                  </span>
+                </td>
+                <td className="px-4 py-4 text-center">
                   <span className={`font-black px-2 py-1 rounded-lg ${getAbsentCount(s.attendance) > 0 ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-400'}`}>
                     {getAbsentCount(s.attendance)}
                   </span>
@@ -236,7 +259,7 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
               </tr>
             )) : (
               <tr>
-                <td colSpan={8} className="px-4 py-20 text-center text-gray-400 italic">Không có dữ liệu học sinh trong nhóm này</td>
+                <td colSpan={9} className="px-4 py-20 text-center text-gray-400 italic">Không có dữ liệu học sinh trong nhóm này</td>
               </tr>
             )}
           </tbody>
