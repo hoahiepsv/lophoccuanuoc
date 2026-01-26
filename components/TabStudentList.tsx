@@ -15,6 +15,22 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [viewDate, setViewDate] = useState(new Date());
 
+  // Thống kê tổng quan
+  const stats = useMemo(() => {
+    const total = students.length;
+    const byGrade: Record<string, number> = {};
+    
+    students.forEach(s => {
+      const g = String(s.grade);
+      byGrade[g] = (byGrade[g] || 0) + 1;
+    });
+
+    // Sắp xếp các nhóm theo thứ tự số học sinh hoặc thứ tự nhóm
+    const sortedGrades = Object.keys(byGrade).sort((a, b) => Number(a) - Number(b));
+
+    return { total, byGrade, sortedGrades };
+  }, [students]);
+
   const filteredStudents = useMemo(() => {
     let result = [...students];
     if (filterGrade !== 'all') {
@@ -128,6 +144,27 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
     }
   };
 
+  // Hàm lấy danh sách các tháng đã đóng phí và định dạng lại
+  const getPaidMonthsList = (tuitionStr: string) => {
+    try {
+      const arr = JSON.parse(tuitionStr || '[]');
+      if (!Array.isArray(arr)) return [];
+      
+      // Sắp xếp theo thời gian
+      return arr.sort((a, b) => {
+        const [mA, yA] = a.split('/').map(Number);
+        const [mB, yB] = b.split('/').map(Number);
+        if (yA !== yB) return yA - yB;
+        return mA - mB;
+      }).map(item => {
+        const [m, y] = item.split('/');
+        return `T${m.padStart(2, '0')}/${y}`;
+      });
+    } catch (e) {
+      return [];
+    }
+  };
+
   const getAttendedCount = (s: Student) => {
     try {
       const schedule = JSON.parse(s.schedule || '[]');
@@ -189,6 +226,27 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
 
   return (
     <div className="space-y-6">
+      {/* Dashboard Stats Section */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-emerald-900 text-white p-5 rounded-2xl shadow-lg border border-emerald-800 flex flex-col justify-center">
+          <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">Tổng số học sinh</p>
+          <p className="text-3xl font-black">{stats.total}</p>
+        </div>
+        
+        <div className="md:col-span-3 bg-white p-5 rounded-2xl shadow-sm border border-emerald-100 flex flex-col overflow-hidden">
+          <p className="text-[10px] font-black uppercase tracking-widest text-emerald-800 opacity-60 mb-3">Số lượng học sinh từng nhóm</p>
+          <div className="flex flex-wrap gap-2 overflow-x-auto pb-1 custom-scrollbar">
+            {stats.sortedGrades.map(g => (
+              <div key={g} className="bg-emerald-50 border border-emerald-100 px-4 py-2 rounded-xl flex items-center gap-3 min-w-[100px]">
+                <span className="bg-emerald-700 text-white w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black">N{g}</span>
+                <span className="text-sm font-black text-emerald-900">{stats.byGrade[g]} <span className="text-[10px] font-medium opacity-50">HS</span></span>
+              </div>
+            ))}
+            {stats.sortedGrades.length === 0 && <p className="text-xs italic text-gray-400">Chưa có dữ liệu học sinh</p>}
+          </div>
+        </div>
+      </div>
+
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-emerald-50 p-4 rounded-xl border border-emerald-100">
         <h2 className="text-xl font-black text-emerald-900 uppercase flex items-center gap-2">
           <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M9 4.804A7.994 7.994 0 0113 4a7.99 7.99 0 0110 7.72V14a2 2 0 01-2 2H3a2 2 0 01-2-2V11.72C1 8.847 2.625 6.353 5.176 4.981A7.99 7.99 0 019 4.804zM5 11.72V14h14v-2.28a6.01 6.01 0 00-4-5.659V7a2 2 0 10-4 0v1.061A6.01 6.01 0 005 11.72zM11 7v1h2V7h-2z" /></svg>
@@ -219,6 +277,7 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
               <th className="px-4 py-4 text-left">Ngày BĐ</th>
               <th className="px-4 py-4 text-center">Số buổi đã học</th>
               <th className="px-4 py-4 text-center">Số buổi vắng</th>
+              <th className="px-4 py-4 text-center max-w-[200px]">Đóng phí</th>
               <th className="px-4 py-4 text-center">Hành động</th>
             </tr>
           </thead>
@@ -248,6 +307,17 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
                     {getAbsentCount(s.attendance)}
                   </span>
                 </td>
+                <td className="px-4 py-4 text-center max-w-[200px]">
+                  <div className="flex flex-wrap gap-1 justify-center max-h-16 overflow-y-auto custom-scrollbar p-1">
+                    {getPaidMonthsList(s.tuition).length > 0 ? getPaidMonthsList(s.tuition).map(m => (
+                      <span key={m} className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-[9px] font-black border border-blue-100 whitespace-nowrap">
+                        {m}
+                      </span>
+                    )) : (
+                      <span className="text-[10px] text-gray-300 italic">Chưa đóng</span>
+                    )}
+                  </div>
+                </td>
                 <td className="px-4 py-4 text-center">
                   <button 
                     onClick={() => handleEdit(s)}
@@ -259,7 +329,7 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
               </tr>
             )) : (
               <tr>
-                <td colSpan={9} className="px-4 py-20 text-center text-gray-400 italic">Không có dữ liệu học sinh trong nhóm này</td>
+                <td colSpan={10} className="px-4 py-20 text-center text-gray-400 italic">Không có dữ liệu học sinh trong nhóm này</td>
               </tr>
             )}
           </tbody>
@@ -342,7 +412,7 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
                           onClick={() => toggleDayInSchedule(day)}
                           className={`h-9 rounded-lg flex items-center justify-center text-xs font-black transition-all border transform active:scale-90 ${
                             selected 
-                              ? 'bg-emerald-400 text-emerald-950 border-emerald-400 shadow-lg' 
+                              ? 'bg-emerald-400 text-emerald-950 border-emerald-400 shadow-lg shadow-emerald-400/20' 
                               : isBeforeStart
                                 ? 'bg-transparent text-emerald-900 border-transparent opacity-20 cursor-not-allowed'
                                 : 'bg-emerald-800/30 border-emerald-700 text-emerald-500 hover:border-emerald-500'
