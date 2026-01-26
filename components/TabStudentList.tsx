@@ -15,6 +15,12 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [viewDate, setViewDate] = useState(new Date());
 
+  // Lấy danh sách các nhóm thực sự có học sinh để hiển thị trong bộ lọc
+  const availableGrades = useMemo(() => {
+    const grades = Array.from(new Set(students.map(s => String(s.grade)))).filter(g => g !== "");
+    return grades.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [students]);
+
   const filteredStudents = useMemo(() => {
     let result = [...students];
     if (filterGrade !== 'all') {
@@ -179,7 +185,7 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
             onChange={(e) => setFilterGrade(e.target.value)}
           >
             <option value="all">TẤT CẢ NHÓM</option>
-            {GRADES.map(g => <option key={g} value={g}>NHÓM {g}</option>)}
+            {availableGrades.map(g => <option key={g} value={g}>NHÓM {g}</option>)}
           </select>
         </div>
       </div>

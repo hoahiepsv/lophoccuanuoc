@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Student } from '../types';
 import { updateStudent } from '../services/apiService';
+import { GRADES } from '../constants';
 
 interface TabAttendanceProps {
   students: Student[];
@@ -12,6 +13,7 @@ const TabAttendance: React.FC<TabAttendanceProps> = ({ students, onRefresh }) =>
   const [mode, setMode] = useState<'today' | 'history'>('today');
   const [absentStudentsToday, setAbsentStudentsToday] = useState<number[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterGrade, setFilterGrade] = useState<string>('all');
   const [selectedStudentStt, setSelectedStudentStt] = useState<number | null>(null);
   const [historyYear, setHistoryYear] = useState<number>(new Date().getFullYear());
   const [historyMonth, setHistoryMonth] = useState<number>(new Date().getMonth() + 1);
@@ -19,6 +21,12 @@ const TabAttendance: React.FC<TabAttendanceProps> = ({ students, onRefresh }) =>
   const [saving, setSaving] = useState(false);
 
   const today = new Date().toLocaleDateString('vi-VN');
+
+  // Lấy danh sách các nhóm thực sự có học sinh để hiển thị trong bộ lọc
+  const availableGrades = useMemo(() => {
+    const grades = Array.from(new Set(students.map(s => String(s.grade)))).filter(g => g !== "");
+    return grades.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [students]);
 
   // Today's Attendance Logic
   const toggleAbsentToday = (stt: number) => {
@@ -70,7 +78,19 @@ const TabAttendance: React.FC<TabAttendanceProps> = ({ students, onRefresh }) =>
     }
   }, [selectedStudentStt, students]);
 
-  const filteredStudents = useMemo(() => {
+  // Combined Filter for Student Grid (Today mode)
+  const studentsToDisplayToday = useMemo(() => {
+    return students.filter(s => {
+      const matchGrade = filterGrade === 'all' || s.grade.toString() === filterGrade.toString();
+      const matchSearch = s.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          s.phone1.includes(searchTerm) || 
+                          s.className.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchGrade && matchSearch;
+    });
+  }, [students, filterGrade, searchTerm]);
+
+  // Filter for Search list (History mode)
+  const filteredStudentsHistory = useMemo(() => {
     return students.filter(s => 
       s.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
       s.phone1.includes(searchTerm)
@@ -103,21 +123,40 @@ const TabAttendance: React.FC<TabAttendanceProps> = ({ students, onRefresh }) =>
     <div className="space-y-8">
       {/* Header & Mode Switch */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-emerald-50 p-6 rounded-3xl border border-emerald-100">
-        <div>
+        <div className="flex-1">
           <h2 className="text-2xl font-black text-emerald-900 uppercase tracking-tight">
             {mode === 'today' ? `Điểm danh vắng ngày ${today}` : "Điểm danh cho ngày trước"}
           </h2>
           <p className="text-xs text-emerald-600 font-medium italic">
-            {mode === 'today' ? "Đánh dấu nhanh những học sinh vắng mặt ngày hôm nay" : "Chọn học sinh và đánh dấu các ngày vắng trong lịch sử"}
+            {mode === 'today' ? "Chọn nhóm và đánh dấu nhanh những học sinh vắng mặt" : "Chọn học sinh và đánh dấu các ngày vắng trong lịch sử"}
           </p>
         </div>
-        <div className="flex gap-3">
+        
+        <div className="flex flex-wrap items-center gap-3 justify-center md:justify-end">
+          {mode === 'today' && (
+            <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-emerald-200 shadow-sm">
+              <label className="text-[10px] font-black uppercase text-emerald-800">Nhóm:</label>
+              <select 
+                className="text-xs font-bold bg-transparent outline-none cursor-pointer"
+                value={filterGrade}
+                onChange={(e) => setFilterGrade(e.target.value)}
+              >
+                <option value="all">TẤT CẢ</option>
+                {availableGrades.map(g => <option key={g} value={g}>NHÓM {g}</option>)}
+              </select>
+            </div>
+          )}
+
           <button 
-            onClick={() => setMode(mode === 'today' ? 'history' : 'today')}
+            onClick={() => {
+              setMode(mode === 'today' ? 'history' : 'today');
+              setSearchTerm(''); // Clear search when switching modes
+            }}
             className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 font-black px-5 py-2.5 rounded-xl text-xs uppercase tracking-widest transition border border-emerald-200"
           >
-            {mode === 'today' ? "📅 ĐIỂM DANH NGÀY TRƯỚC" : "⚡ ĐIỂM DANH HÔM NAY"}
+            {mode === 'today' ? "📅 LỊCH SỬ VẮNG" : "⚡ ĐIỂM DANH NHANH"}
           </button>
+          
           {mode === 'today' && (
             <button 
               onClick={handleSaveToday}
@@ -131,33 +170,50 @@ const TabAttendance: React.FC<TabAttendanceProps> = ({ students, onRefresh }) =>
       </div>
 
       {mode === 'today' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {students.map(s => (
-            <div 
-              key={s.stt}
-              onClick={() => toggleAbsentToday(s.stt)}
-              className={`cursor-pointer p-5 rounded-2xl border-2 transition-all transform active:scale-95 flex items-center gap-4 ${
-                absentStudentsToday.includes(s.stt) 
-                  ? 'bg-red-50 border-red-500 shadow-lg scale-[1.02]' 
-                  : 'bg-white border-gray-100 hover:border-emerald-200'
-              }`}
-            >
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg ${
-                absentStudentsToday.includes(s.stt) ? 'bg-red-500 text-white shadow-md' : 'bg-emerald-50 text-emerald-700'
-              }`}>
-                {s.fullName.charAt(0)}
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <h4 className={`font-black text-sm uppercase truncate ${absentStudentsToday.includes(s.stt) ? 'text-red-700' : 'text-emerald-900'}`}>{s.fullName}</h4>
-                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">Lớp {s.className} - Nhóm {s.grade}</p>
-              </div>
-              {absentStudentsToday.includes(s.stt) && (
-                <div className="text-red-500">
-                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
+        <div className="space-y-6">
+          <div className="relative max-w-md mx-auto">
+            <input 
+              type="text" 
+              placeholder="Tìm kiếm nhanh tên, lớp, sđt..." 
+              className="w-full border-2 border-emerald-50 rounded-2xl p-4 pl-12 font-bold shadow-sm outline-none focus:border-emerald-500 transition"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            <svg className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-emerald-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 animate-fadeIn">
+            {studentsToDisplayToday.length > 0 ? studentsToDisplayToday.map(s => (
+              <div 
+                key={s.stt}
+                onClick={() => toggleAbsentToday(s.stt)}
+                className={`cursor-pointer p-5 rounded-2xl border-2 transition-all transform active:scale-95 flex items-center gap-4 ${
+                  absentStudentsToday.includes(s.stt) 
+                    ? 'bg-red-50 border-red-500 shadow-lg scale-[1.02]' 
+                    : 'bg-white border-gray-100 hover:border-emerald-200'
+                }`}
+              >
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg ${
+                  absentStudentsToday.includes(s.stt) ? 'bg-red-500 text-white shadow-md' : 'bg-emerald-50 text-emerald-700'
+                }`}>
+                  {s.fullName.charAt(0)}
                 </div>
-              )}
-            </div>
-          ))}
+                <div className="flex-1 overflow-hidden">
+                  <h4 className={`font-black text-sm uppercase truncate ${absentStudentsToday.includes(s.stt) ? 'text-red-700' : 'text-emerald-900'}`}>{s.fullName}</h4>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">Lớp {s.className} - Nhóm {s.grade}</p>
+                </div>
+                {absentStudentsToday.includes(s.stt) && (
+                  <div className="text-red-500">
+                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
+                  </div>
+                )}
+              </div>
+            )) : (
+              <div className="col-span-full py-20 text-center text-gray-400 italic">
+                Không tìm thấy học sinh nào trong nhóm này
+              </div>
+            )}
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -173,7 +229,7 @@ const TabAttendance: React.FC<TabAttendanceProps> = ({ students, onRefresh }) =>
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
               <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                {filteredStudents.map(s => (
+                {filteredStudentsHistory.map(s => (
                   <button
                     key={s.stt}
                     onClick={() => setSelectedStudentStt(s.stt)}
