@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Student } from '../types';
 import { updateStudent } from '../services/apiService';
+import { GRADES } from '../constants';
 
 interface TabPayTuitionProps {
   students: Student[];
@@ -10,6 +11,7 @@ interface TabPayTuitionProps {
 
 const TabPayTuition: React.FC<TabPayTuitionProps> = ({ students, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterGrade, setFilterGrade] = useState<string>('all');
   const [selectedStudentStt, setSelectedStudentStt] = useState<number | null>(null);
   const [tuitionYear, setTuitionYear] = useState<number>(new Date().getFullYear());
   const [saving, setSaving] = useState(false);
@@ -36,14 +38,16 @@ const TabPayTuition: React.FC<TabPayTuitionProps> = ({ students, onRefresh }) =>
     }
   }, [selectedStudentStt, students]);
 
-  // Search filter
+  // Search filter and Grade filter
   const filteredStudents = useMemo(() => {
-    if (!searchTerm) return students.slice(0, 10);
-    return students.filter(s => 
-      s.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      s.phone1.includes(searchTerm)
-    ).slice(0, 10);
-  }, [students, searchTerm]);
+    return students.filter(s => {
+      const matchGrade = filterGrade === 'all' || s.grade.toString() === filterGrade.toString();
+      const matchSearch = s.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          s.phone1.includes(searchTerm);
+      return matchGrade && matchSearch;
+    });
+    // Đã gỡ bỏ .slice(0, 10) để cuộn hết danh sách
+  }, [students, searchTerm, filterGrade]);
 
   const toggleMonth = (month: number) => {
     const key = `${month}/${tuitionYear}`;
@@ -84,32 +88,48 @@ const TabPayTuition: React.FC<TabPayTuitionProps> = ({ students, onRefresh }) =>
   }, [selectedStudent, localPaidMonths]);
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="max-w-6xl mx-auto space-y-8">
       <div className="text-center space-y-2">
         <h2 className="text-3xl font-black text-emerald-900 uppercase tracking-widest flex items-center justify-center gap-3">
-          <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+          <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2-2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
           Ghi nhận đóng học phí
         </h2>
-        <p className="text-emerald-600 font-medium italic">Stick chọn các tháng đã đóng phí và bấm Cập Nhật</p>
+        <p className="text-emerald-600 font-medium italic">Chọn học sinh, tick chọn các tháng đã đóng phí và bấm Cập Nhật</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Left Panel: Search & Select */}
+        {/* Left Panel: Search, Filter & Select */}
         <div className="lg:col-span-5 space-y-4">
-          <div className="bg-emerald-50 p-6 rounded-3xl border-2 border-emerald-100 shadow-sm">
-            <label className="block text-[10px] font-black uppercase text-emerald-800 mb-3 ml-1 tracking-widest">Tìm kiếm học sinh:</label>
-            <div className="relative">
-              <input 
-                type="text"
-                placeholder="Nhập tên hoặc số điện thoại..."
-                className="w-full border-2 border-white bg-white rounded-2xl p-4 pl-12 font-bold shadow-sm outline-none focus:border-emerald-500 transition"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-              <svg className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+          <div className="bg-emerald-50 p-6 rounded-3xl border-2 border-emerald-100 shadow-sm space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-black uppercase text-emerald-800 mb-1.5 ml-1 tracking-widest">Nhóm:</label>
+                <select 
+                  className="w-full border-2 border-white bg-white rounded-xl p-3 text-xs font-bold shadow-sm outline-none focus:border-emerald-500 appearance-none"
+                  value={filterGrade}
+                  onChange={(e) => setFilterGrade(e.target.value)}
+                >
+                  <option value="all">TẤT CẢ NHÓM</option>
+                  {GRADES.map(g => <option key={g} value={g}>NHÓM {g}</option>)}
+                  <option value="Kèm riêng">KÈM RIÊNG</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase text-emerald-800 mb-1.5 ml-1 tracking-widest">Tìm tên/SĐT:</label>
+                <div className="relative">
+                  <input 
+                    type="text"
+                    placeholder="Tìm..."
+                    className="w-full border-2 border-white bg-white rounded-xl p-3 pl-10 text-xs font-bold shadow-sm outline-none focus:border-emerald-500 transition"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                  <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-emerald-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                </div>
+              </div>
             </div>
 
-            <div className="mt-6 space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
+            <div className="mt-6 space-y-2 max-h-[500px] overflow-y-auto custom-scrollbar pr-2">
               {filteredStudents.length > 0 ? filteredStudents.map(s => (
                 <button
                   key={s.stt}
@@ -123,7 +143,7 @@ const TabPayTuition: React.FC<TabPayTuitionProps> = ({ students, onRefresh }) =>
                   <div className="text-left">
                     <p className="font-black text-sm uppercase">{s.fullName}</p>
                     <p className={`text-[10px] uppercase font-bold tracking-tighter ${selectedStudentStt === s.stt ? 'text-emerald-300' : 'text-emerald-500'}`}>
-                      Lớp {s.className} - Nhóm {s.grade}
+                      Lớp {s.className} - {s.grade === 'Kèm riêng' ? 'Kèm riêng' : `Nhóm ${s.grade}`}
                     </p>
                   </div>
                   <div className={`text-[10px] font-mono px-2 py-1 rounded ${selectedStudentStt === s.stt ? 'bg-emerald-800' : 'bg-emerald-50 text-emerald-700'}`}>

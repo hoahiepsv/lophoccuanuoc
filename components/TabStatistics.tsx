@@ -19,6 +19,7 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
   const currentYear = new Date().getFullYear();
   const today = new Date();
 
+  // Thống kê tình trạng học phí
   const tuitionStatus = useMemo(() => {
     const paidList: Student[] = [];
     const unpaidThisMonth: Student[] = [];
@@ -48,6 +49,7 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
     return { paidList, unpaidThisMonth, debtList };
   }, [students, currentMonth, currentYear]);
 
+  // Phân tích chi tiết học sinh được chọn
   const studentAnalysis = useMemo(() => {
     if (!selectedStudent) return null;
 
@@ -67,15 +69,37 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
     const startDate = new Date(selectedStudent.startDate);
     const monthsDiff = (today.getFullYear() - startDate.getFullYear()) * 12 + (today.getMonth() - startDate.getMonth()) + 1;
     
-    const paidCount = paidMonths.length;
-    const unpaidCount = Math.max(0, monthsDiff - paidCount);
+    // Tính toán các tháng chưa đóng phí
+    const unpaidMonthsList: string[] = [];
+    let temp = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+    while (temp < new Date(today.getFullYear(), today.getMonth() + 1, 1)) {
+      const checkKey = `${temp.getMonth() + 1}/${temp.getFullYear()}`;
+      if (!paidMonths.includes(checkKey)) {
+        unpaidMonthsList.push(`T${String(temp.getMonth() + 1).padStart(2, '0')}/${temp.getFullYear()}`);
+      }
+      temp.setMonth(temp.getMonth() + 1);
+    }
+
+    // Format paid months for display
+    const formattedPaidMonths = paidMonths.sort((a, b) => {
+      const [mA, yA] = a.split('/').map(Number);
+      const [mB, yB] = b.split('/').map(Number);
+      if (yA !== yB) return yA - yB;
+      return mA - mB;
+    }).map(item => {
+      const [m, y] = item.split('/');
+      return `T${m.padStart(2, '0')}/${y}`;
+    });
 
     return {
       scheduledUpToNow,
       absents,
+      absentDates: absentDays,
       actualAttendance,
-      paidCount,
-      unpaidCount,
+      paidCount: paidMonths.length,
+      paidMonthsList: formattedPaidMonths,
+      unpaidCount: unpaidMonthsList.length,
+      unpaidMonthsList,
       totalMonths: monthsDiff
     };
   }, [selectedStudent, today]);
@@ -86,6 +110,7 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
     { name: 'Nợ phí', value: tuitionStatus.debtList.length, color: '#c2410c' }
   ];
 
+  // Hàm tạo báo cáo tổng hợp
   const handleGenerateGeneralReport = async () => {
     setReportType('general');
     setIsGenerating(true);
@@ -94,6 +119,7 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
     setIsGenerating(false);
   };
 
+  // Hàm tạo báo cáo cá nhân
   const handleGenerateIndividualReport = async () => {
     if (!selectedStudent || !studentAnalysis) return;
     setReportType('individual');
@@ -103,6 +129,7 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
     setIsGenerating(false);
   };
 
+  // Hàm tải file PDF báo cáo
   const handleDownloadPDF = () => {
     const element = document.querySelector('.report-canvas');
     if (!element) return;
@@ -125,6 +152,7 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
     html2pdf().set(opt).from(element).save();
   };
 
+  // Hàm format Markdown sang JSX
   const formatMarkdown = (text: string) => {
     const sanitizedText = text
       .replace(/\*\*/g, '') 
@@ -200,6 +228,7 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
 
   return (
     <div className="space-y-10">
+      {/* Dashboard Summary Widgets */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 no-print">
         <div className="bg-emerald-50 border border-emerald-200 p-6 rounded-2xl shadow-sm">
           <p className="text-[10px] font-black uppercase text-emerald-800 opacity-60 mb-1">Đã đóng học phí T.{currentMonth}</p>
@@ -207,8 +236,8 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
           <div className="mt-4 space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
              {tuitionStatus.paidList.map(s => (
                <div key={s.stt} className="text-[10px] border-b border-emerald-100 pb-1 flex justify-between">
-                 <span className="font-bold text-emerald-900">{s.fullName}</span>
-                 <span className="opacity-60">{s.className}</span>
+                 <span className="font-bold text-emerald-900">{s.fullName} - {s.className}</span>
+                 <span className="opacity-60">Nhóm {s.grade}</span>
                </div>
              ))}
           </div>
@@ -219,7 +248,7 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
           <div className="mt-4 space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
              {tuitionStatus.unpaidThisMonth.map(s => (
                <div key={s.stt} className="text-[10px] border-b border-red-100 pb-1 flex justify-between">
-                 <span className="font-bold text-red-700">{s.fullName}</span>
+                 <span className="font-bold text-red-700">{s.fullName} - {s.className}</span>
                  <span className="opacity-60">{s.phone1}</span>
                </div>
              ))}
@@ -231,8 +260,8 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
           <div className="mt-4 space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
              {tuitionStatus.debtList.map(s => (
                <div key={s.stt} className="text-[10px] border-b border-orange-100 pb-1 flex justify-between">
-                 <span className="font-bold text-orange-700">{s.fullName}</span>
-                 <span className="opacity-60">Lớp {s.className}</span>
+                 <span className="font-bold text-orange-700">{s.fullName} - {s.className}</span>
+                 <span className="opacity-60">Nhóm {s.grade}</span>
                </div>
              ))}
           </div>
@@ -240,6 +269,7 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
       </div>
 
       <div className="flex flex-col lg:flex-row gap-8 no-print">
+        {/* Class Overview Chart */}
         <div className="flex-1 bg-white p-8 rounded-3xl border border-emerald-100 shadow-xl space-y-6">
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-black text-emerald-900 uppercase tracking-widest border-l-4 border-emerald-500 pl-4">Toàn bộ lớp học</h2>
@@ -267,7 +297,8 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
           </div>
         </div>
 
-        <div className="flex-1 bg-emerald-900 p-8 rounded-3xl shadow-xl space-y-6 text-white">
+        {/* Individual Student Selection & Insights */}
+        <div className="flex-1 bg-emerald-900 p-8 rounded-3xl shadow-xl space-y-6 text-white overflow-hidden">
           <h2 className="text-xl font-black uppercase tracking-widest border-l-4 border-emerald-400 pl-4">Thông tin học sinh</h2>
           <div className="space-y-6">
             <select 
@@ -279,36 +310,63 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
             </select>
             
             {selectedStudent && studentAnalysis ? (
-              <div className="animate-fadeIn space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="animate-fadeIn space-y-6 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+                <div className="grid grid-cols-1 gap-4">
                   {/* Box 1: Ngày bắt đầu */}
-                  <div className="bg-emerald-800/50 p-4 rounded-2xl border border-emerald-700 col-span-1 sm:col-span-2 flex justify-between items-center">
-                    <span className="text-[10px] font-black uppercase text-emerald-400">Ngày bắt đầu:</span>
-                    <span className="font-black text-lg">{selectedStudent.startDate}</span>
+                  <div className="bg-emerald-800/50 p-5 rounded-2xl border border-emerald-700 flex justify-between items-center shadow-inner">
+                    <span className="text-[10px] font-black uppercase text-emerald-400 tracking-wider">Ngày bắt đầu học:</span>
+                    <span className="font-black text-xl text-white">{selectedStudent.startDate}</span>
                   </div>
                   
-                  {/* Box 2: Số buổi đã học */}
-                  <div className="bg-emerald-800/50 p-4 rounded-2xl border border-emerald-700">
-                    <p className="text-[9px] font-black uppercase text-emerald-400 opacity-60 mb-1">Số buổi đã học:</p>
-                    <p className="text-2xl font-black text-emerald-300">{studentAnalysis.actualAttendance}</p>
+                  {/* Box 2: Số buổi vắng học */}
+                  <div className="bg-red-900/60 p-5 rounded-2xl border border-red-500/50 space-y-3 shadow-lg transform hover:scale-[1.01] transition">
+                    <div className="flex justify-between items-center">
+                      <p className="text-[10px] font-black uppercase text-red-200 tracking-widest">Số buổi vắng học</p>
+                      <p className="text-3xl font-black text-red-400 drop-shadow-sm">{studentAnalysis.absents}</p>
+                    </div>
+                    {studentAnalysis.absentDates.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-2 border-t border-red-800/50">
+                        {studentAnalysis.absentDates.map(date => (
+                          <span key={date} className="bg-red-950/40 text-red-300 text-[9px] font-bold px-2 py-0.5 rounded border border-red-800/30 whitespace-nowrap">
+                            {date}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
-                  {/* Box 3: Số buổi vắng học */}
-                  <div className="bg-red-900/40 p-4 rounded-2xl border border-red-800/50">
-                    <p className="text-[9px] font-black uppercase text-red-300 opacity-60 mb-1">Số buổi vắng học:</p>
-                    <p className="text-2xl font-black text-red-400">{studentAnalysis.absents}</p>
+                  {/* Box 3: Số tháng đã đóng phí */}
+                  <div className="bg-emerald-700/40 p-5 rounded-2xl border border-emerald-400/50 space-y-3 shadow-lg transform hover:scale-[1.01] transition">
+                    <div className="flex justify-between items-center">
+                      <p className="text-[10px] font-black uppercase text-emerald-200 tracking-widest">Số tháng đã đóng phí</p>
+                      <p className="text-3xl font-black text-emerald-300 drop-shadow-sm">{studentAnalysis.paidCount}</p>
+                    </div>
+                    {studentAnalysis.paidMonthsList.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-2 border-t border-emerald-800/50">
+                        {studentAnalysis.paidMonthsList.map(month => (
+                          <span key={month} className="bg-emerald-950/40 text-emerald-300 text-[9px] font-bold px-2 py-0.5 rounded border border-emerald-800/30 whitespace-nowrap">
+                            {month}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
-                  {/* Box 4: Số tháng đã đóng phí */}
-                  <div className="bg-emerald-800/50 p-4 rounded-2xl border border-emerald-700">
-                    <p className="text-[9px] font-black uppercase text-emerald-400 opacity-60 mb-1">Số tháng đã đóng phí:</p>
-                    <p className="text-2xl font-black text-emerald-300">{studentAnalysis.paidCount}</p>
-                  </div>
-
-                  {/* Box 5: Số tháng chưa đóng phí */}
-                  <div className="bg-amber-900/40 p-4 rounded-2xl border border-amber-800/50">
-                    <p className="text-[9px] font-black uppercase text-amber-300 opacity-60 mb-1">Số tháng chưa đóng phí:</p>
-                    <p className="text-2xl font-black text-amber-400">{studentAnalysis.unpaidCount}</p>
+                  {/* Box 4: Số tháng chưa đóng phí */}
+                  <div className="bg-amber-600/40 p-5 rounded-2xl border border-amber-400/50 space-y-3 shadow-lg transform hover:scale-[1.01] transition">
+                    <div className="flex justify-between items-center">
+                      <p className="text-[10px] font-black uppercase text-amber-200 tracking-widest">Số tháng chưa đóng</p>
+                      <p className="text-3xl font-black text-amber-400 drop-shadow-sm">{studentAnalysis.unpaidCount}</p>
+                    </div>
+                    {studentAnalysis.unpaidMonthsList.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-2 border-t border-amber-800/50">
+                        {studentAnalysis.unpaidMonthsList.map(month => (
+                          <span key={month} className="bg-amber-950/40 text-amber-300 text-[9px] font-bold px-2 py-0.5 rounded border border-amber-800/30 whitespace-nowrap">
+                            {month}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -329,106 +387,51 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
         </div>
       </div>
 
+      {/* AI Report Generation UI */}
       {isGenerating && (
-        <div className="flex flex-col items-center py-20 animate-pulse no-print">
-          <div className="w-20 h-20 border-4 border-emerald-100 border-t-emerald-600 rounded-full animate-spin mb-6"></div>
-          <p className="text-emerald-900 font-black text-lg tracking-widest uppercase text-center">AI đang tổng hợp dữ liệu bảng biểu...</p>
+        <div className="flex flex-col items-center justify-center py-12 bg-white rounded-3xl border border-emerald-100 shadow-xl no-print">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-emerald-900 border-opacity-50 mb-4"></div>
+          <p className="text-emerald-900 font-black uppercase text-xs tracking-[0.2em] animate-pulse">Đang phân tích dữ liệu & khởi tạo báo cáo AI...</p>
         </div>
       )}
 
       {reportContent && !isGenerating && (
-        <div className="bg-white border-2 border-emerald-100 rounded-[2rem] p-8 md:p-12 relative shadow-2xl overflow-hidden animate-fadeIn">
-          <div className="flex justify-end gap-3 mb-8 no-print">
-            <button 
-              onClick={handleDownloadPDF}
-              className="bg-emerald-600 text-white hover:bg-emerald-700 px-6 py-3 rounded-xl text-xs font-black flex items-center gap-2 transition shadow-lg transform active:scale-95 uppercase"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-              TẢI XUỐNG PDF (CHUẨN IN)
-            </button>
-            <button 
-              onClick={() => window.print()}
-              className="bg-emerald-900 text-white hover:bg-black px-6 py-3 rounded-xl text-xs font-black flex items-center gap-2 transition shadow-lg transform active:scale-95 uppercase"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
-              MỞ HỘP THOẠI IN
-            </button>
+        <div className="space-y-6 animate-fadeIn">
+          <div className="flex justify-end no-print">
+             <button 
+               onClick={handleDownloadPDF}
+               className="bg-emerald-900 text-white font-black px-6 py-3 rounded-xl shadow-lg hover:bg-emerald-950 transition transform active:scale-95 flex items-center gap-3 uppercase text-xs tracking-widest"
+             >
+               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+               XUẤT FILE PDF BÁO CÁO
+             </button>
           </div>
-          
-          <div className="report-canvas-wrapper no-print bg-gray-100 p-8 flex flex-col items-center overflow-auto max-h-[1000px] border border-gray-300 rounded-2xl shadow-inner">
-              <div className="report-canvas bg-white shadow-2xl" 
-                style={{ 
-                  fontFamily: '"Times New Roman", Times, serif', 
-                  fontSize: '13pt', 
-                  color: 'black', 
-                  width: '210mm', 
-                  padding: '0', 
-                  boxSizing: 'border-box',
-                  position: 'relative',
-                  backgroundColor: 'white',
-                  display: 'block'
-                }}>
-                <div className="text-center mb-8 border-b-2 border-black pb-4 mt-0">
-                  <h1 className="text-xl font-bold uppercase mt-0 pt-2">HỆ THỐNG GIÁO DỤC LÊ XUÂN NƯỚC</h1>
-                  <p className="text-[10pt] font-bold italic mt-1">{COPYRIGHT}</p>
-                  <h2 className="text-2xl font-bold mt-8 uppercase decoration-1 underline underline-offset-8">
-                    {reportType === 'general' ? 'BÁO CÁO THỐNG KÊ LỚP HỌC' : 'PHIẾU THEO DÕI HỌC TẬP CHI TIẾT'}
-                  </h2>
-                  <p className="mt-4 italic">Thời điểm lập báo cáo: {today.toLocaleDateString('vi-VN')} {today.getHours()}:{today.getMinutes()}</p>
-                </div>
-                
-                <div className="report-body whitespace-pre-wrap leading-relaxed text-justify mb-10 overflow-hidden">
-                  {formatMarkdown(reportContent)}
-                </div>
 
-                <div className="mt-20 pt-10 flex justify-between items-start">
-                  <div className="text-center w-56">
-                    <p className="font-bold mb-20">GIÁO VIÊN CHỦ NHIỆM</p>
-                    <p className="font-bold">Lê Xuân Nước</p>
-                  </div>
-                  <div className="text-right w-64 text-[10pt] text-gray-400 italic">
-                    <p className="mb-2 opacity-50">Báo cáo hệ thống bảo mật</p>
-                    <p className="font-bold uppercase tracking-widest leading-tight">{COPYRIGHT}</p>
-                  </div>
+          <div className="report-canvas bg-white p-12 md:p-16 rounded-[2rem] shadow-2xl border border-gray-100 min-h-[1000px] text-black">
+             {/* PDF Report Header */}
+             <div className="border-b-4 border-black pb-6 mb-10 flex justify-between items-end">
+                <div>
+                  <h1 className="text-2xl font-black uppercase tracking-tight">HỆ THỐNG QUẢN LÝ LỚP HỌC</h1>
+                  <p className="text-sm font-bold uppercase tracking-widest text-gray-600">GIÁO VIÊN: LÊ XUÂN NƯỚC</p>
                 </div>
-              </div>
+                <div className="text-right">
+                  <p className="text-[10pt] font-bold">Ngày lập báo cáo: {today.toLocaleDateString('vi-VN')}</p>
+                  <p className="text-[10pt] italic">Mã báo cáo: #{today.getTime()}</p>
+                </div>
+             </div>
+
+             {/* AI Generated Markdown Content rendered to JSX */}
+             <div className="report-content">
+                {formatMarkdown(reportContent)}
+             </div>
+
+             <div className="mt-16 pt-8 border-t border-gray-200 flex justify-between items-center italic text-gray-400 text-[9pt]">
+                <p>{COPYRIGHT}</p>
+                <p>Trang 1/1</p>
+             </div>
           </div>
         </div>
       )}
-
-      <style>{`
-        @media print {
-          body { background: white !important; margin: 0 !important; padding: 0 !important; }
-          #root { background: white !important; }
-          .report-canvas-wrapper { padding: 0 !important; background: transparent !important; overflow: visible !important; max-height: none !important; display: block !important; }
-          .report-canvas { 
-            box-shadow: none !important; 
-            width: 170mm !important;
-            margin: 20mm !important; 
-            padding: 0 !important;
-            display: block !important;
-          }
-          .no-print { display: none !important; }
-          @page { size: A4; margin: 0; }
-        }
-        .report-canvas table {
-          width: 100% !important;
-          border-collapse: collapse !important;
-          margin-bottom: 1.5rem;
-          page-break-inside: auto;
-          font-family: inherit;
-        }
-        .report-canvas tr {
-          page-break-inside: avoid;
-          page-break-after: auto;
-        }
-        .report-canvas td {
-          word-break: break-word;
-        }
-        .report-body p {
-          page-break-inside: avoid;
-        }
-      `}</style>
     </div>
   );
 };

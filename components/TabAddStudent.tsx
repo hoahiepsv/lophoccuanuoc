@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { addStudent } from '../services/apiService';
 import { TeacherSchedule } from '../types';
 import { GRADES } from '../constants';
@@ -18,6 +18,7 @@ const TabAddStudent: React.FC<TabAddStudentProps> = ({ teacherSchedules, onRefre
     return `${year}-${month}-${day}`;
   };
 
+  const [isPrivate, setIsPrivate] = useState(false);
   const [formData, setFormData] = useState({
     fullName: '',
     grade: '',
@@ -30,17 +31,23 @@ const TabAddStudent: React.FC<TabAddStudentProps> = ({ teacherSchedules, onRefre
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [paidMonths, setPaidMonths] = useState<string[]>([]);
   const [tuitionYear, setTuitionYear] = useState<number>(new Date().getFullYear());
-  
-  // State cho việc điều hướng lịch hiển thị
   const [viewDate, setViewDate] = useState(new Date());
 
+  // Khi tick "Kèm riêng", gán grade là "Kèm riêng"
+  useEffect(() => {
+    if (isPrivate) {
+      setFormData(prev => ({ ...prev, grade: 'Kèm riêng' }));
+    } else {
+      setFormData(prev => ({ ...prev, grade: '' }));
+    }
+  }, [isPrivate]);
+
   const handleInsertTeacherSchedule = () => {
-    if (!formData.grade) {
-      alert("Vui lòng chọn NHÓM của học sinh trước để lấy lịch tương ứng!");
+    if (!formData.grade || formData.grade === 'Kèm riêng') {
+      alert("Học sinh kèm riêng hoặc chưa chọn Nhóm nên không thể chèn lịch giáo viên tự động. Vui lòng chọn lịch thủ công.");
       return;
     }
     
-    // Tìm lịch dạy của giáo viên tương ứng với NHÓM đã chọn từ DATASHEET2
     const schedule = teacherSchedules.find(ts => ts.grade.toString() === formData.grade.toString());
     
     if (!schedule) {
@@ -55,7 +62,6 @@ const TabAddStudent: React.FC<TabAddStudentProps> = ({ teacherSchedules, onRefre
       console.error("Lỗi parse lịch dạy:", e);
     }
     
-    // Chèn những ngày từ ngày bắt đầu học trở đi
     const validDays = days.filter(d => d >= formData.startDate);
     
     if (validDays.length === 0) {
@@ -63,14 +69,11 @@ const TabAddStudent: React.FC<TabAddStudentProps> = ({ teacherSchedules, onRefre
       return;
     }
 
-    // Gộp lịch dạy vào lịch của học sinh (tự động stick)
     const newSchedule = Array.from(new Set([...selectedDays, ...validDays])).sort();
     setSelectedDays(newSchedule);
-    
-    // Tự động chuyển lịch xem đến tháng đăng ký
     setViewDate(new Date(formData.startDate));
     
-    alert(`Đã tự động chèn ${validDays.length} ngày học từ kế hoạch dạy của giáo viên Nhóm ${formData.grade}. Bạn có thể chỉnh sửa thủ công nếu cần.`);
+    alert(`Đã tự động chèn ${validDays.length} ngày học từ kế hoạch dạy của giáo viên Nhóm ${formData.grade}.`);
   };
 
   const toggleMonth = (m: number) => {
@@ -116,6 +119,7 @@ const TabAddStudent: React.FC<TabAddStudentProps> = ({ teacherSchedules, onRefre
         phone2: '',
         startDate: getTodayStr(),
       });
+      setIsPrivate(false);
       setSelectedDays([]);
       setPaidMonths([]);
       onRefresh();
@@ -145,10 +149,19 @@ const TabAddStudent: React.FC<TabAddStudentProps> = ({ teacherSchedules, onRefre
       <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-10">
         <div className="lg:col-span-5 space-y-8">
            <div className="bg-emerald-50 p-8 rounded-[2.5rem] border-2 border-emerald-100 shadow-sm space-y-6">
-              <h3 className="text-lg font-black text-emerald-800 uppercase flex items-center gap-3">
-                <span className="bg-emerald-800 text-white w-8 h-8 rounded-xl flex items-center justify-center text-xs">01</span>
-                Hồ sơ học sinh
-              </h3>
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-black text-emerald-800 uppercase flex items-center gap-3">
+                  <span className="bg-emerald-800 text-white w-8 h-8 rounded-xl flex items-center justify-center text-xs">01</span>
+                  Hồ sơ học sinh
+                </h3>
+                <button 
+                  type="button"
+                  onClick={() => setIsPrivate(!isPrivate)}
+                  className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all border-2 ${isPrivate ? 'bg-emerald-700 text-white border-emerald-700' : 'bg-white text-emerald-700 border-emerald-200 hover:border-emerald-500'}`}
+                >
+                  {isPrivate ? '✓ ĐANG KÈM RIÊNG' : '+ KÈM RIÊNG'}
+                </button>
+              </div>
               
               <div className="space-y-5">
                 <div>
@@ -166,7 +179,8 @@ const TabAddStudent: React.FC<TabAddStudentProps> = ({ teacherSchedules, onRefre
                   <div>
                     <label className="block text-[10px] font-black uppercase text-emerald-700 mb-1 ml-1">Nhóm (*)</label>
                     <select 
-                      className="w-full border-2 border-white bg-white rounded-2xl p-4 font-bold shadow-sm outline-none focus:border-emerald-500 appearance-none"
+                      disabled={isPrivate}
+                      className={`w-full border-2 border-white bg-white rounded-2xl p-4 font-bold shadow-sm outline-none focus:border-emerald-500 appearance-none ${isPrivate ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
                       value={formData.grade}
                       onChange={(e) => setFormData({...formData, grade: e.target.value})}
                       required
@@ -175,6 +189,7 @@ const TabAddStudent: React.FC<TabAddStudentProps> = ({ teacherSchedules, onRefre
                       {GRADES.map(g => (
                         <option key={g} value={g}>Nhóm {g}</option>
                       ))}
+                      {isPrivate && <option value="Kèm riêng">Kèm riêng</option>}
                     </select>
                   </div>
                   <div>
@@ -266,14 +281,16 @@ const TabAddStudent: React.FC<TabAddStudentProps> = ({ teacherSchedules, onRefre
             <div className="space-y-4">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                 <span className="text-xs font-black uppercase tracking-widest">LỊCH HỌC RIÊNG CỦA HS:</span>
-                <button 
-                  type="button"
-                  onClick={handleInsertTeacherSchedule}
-                  className="bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-400 transition shadow-lg flex items-center gap-2 group"
-                >
-                  <svg className="w-4 h-4 group-hover:animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                  Chèn lịch dạy giáo viên
-                </button>
+                {!isPrivate && (
+                  <button 
+                    type="button"
+                    onClick={handleInsertTeacherSchedule}
+                    className="bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-400 transition shadow-lg flex items-center gap-2 group"
+                  >
+                    <svg className="w-4 h-4 group-hover:animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                    Chèn lịch dạy giáo viên
+                  </button>
+                )}
               </div>
 
               <div className="bg-white/5 p-6 rounded-3xl border border-emerald-700/50">
