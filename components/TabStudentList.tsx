@@ -26,7 +26,11 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
     });
 
     // Sắp xếp các nhóm theo thứ tự số học sinh hoặc thứ tự nhóm
-    const sortedGrades = Object.keys(byGrade).sort((a, b) => Number(a) - Number(b));
+    const sortedGrades = Object.keys(byGrade).sort((a, b) => {
+      if (a === 'Đã nghỉ học') return 1;
+      if (b === 'Đã nghỉ học') return -1;
+      return Number(a) - Number(b);
+    });
 
     return { total, byGrade, sortedGrades };
   }, [students]);
@@ -135,6 +139,26 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
     }
   };
 
+  const handleWithdraw = async () => {
+    if (!editingStudent) return;
+    if (!window.confirm(`Xác nhận học sinh ${editingStudent.fullName} đã nghỉ học? Hành động này sẽ chuyển nhóm học sinh sang "Đã nghỉ học".`)) return;
+
+    const withdrawnStudent = {
+      ...editingStudent,
+      grade: 'Đã nghỉ học',
+      startDate: editingStudent.startDate.split('T')[0].split(' ')[0]
+    };
+
+    const success = await updateStudent(withdrawnStudent);
+    if (success) {
+      alert(`Đã chuyển trạng thái học sinh ${editingStudent.fullName} sang 'Đã nghỉ học' thành công!`);
+      setEditingStudent(null);
+      onRefresh();
+    } else {
+      alert("Lỗi khi cập nhật trạng thái nghỉ học.");
+    }
+  };
+
   const getAbsentCount = (attendanceStr: string) => {
     try {
       const arr = JSON.parse(attendanceStr || '[]');
@@ -144,13 +168,11 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
     }
   };
 
-  // Hàm lấy danh sách các tháng đã đóng phí và định dạng lại
   const getPaidMonthsList = (tuitionStr: string) => {
     try {
       const arr = JSON.parse(tuitionStr || '[]');
       if (!Array.isArray(arr)) return [];
       
-      // Sắp xếp theo thời gian
       return arr.sort((a, b) => {
         const [mA, yA] = a.split('/').map(Number);
         const [mB, yB] = b.split('/').map(Number);
@@ -172,10 +194,8 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
       const today = new Date();
       today.setHours(23, 59, 59, 999);
 
-      // Tính số buổi trong lịch tính đến hiện tại (định dạng YYYY-MM-DD)
       const scheduledUntilNow = schedule.filter((d: string) => new Date(d) <= today).length;
       
-      // Tính số buổi vắng (định dạng DD/MM/YYYY)
       const absentsUntilNow = attendance.filter((d: string) => {
         const [day, month, year] = d.split('/').map(Number);
         const date = new Date(year, month - 1, day);
@@ -237,9 +257,13 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
           <p className="text-[10px] font-black uppercase tracking-widest text-emerald-800 opacity-60 mb-3">Số lượng học sinh từng nhóm</p>
           <div className="flex flex-wrap gap-2 overflow-x-auto pb-1 custom-scrollbar">
             {stats.sortedGrades.map(g => (
-              <div key={g} className="bg-emerald-50 border border-emerald-100 px-4 py-2 rounded-xl flex items-center gap-3 min-w-[100px]">
-                <span className="bg-emerald-700 text-white w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black">N{g}</span>
-                <span className="text-sm font-black text-emerald-900">{stats.byGrade[g]} <span className="text-[10px] font-medium opacity-50">HS</span></span>
+              <div key={g} className={`border px-4 py-2 rounded-xl flex items-center gap-3 min-w-[100px] ${g === 'Đã nghỉ học' ? 'bg-red-50 border-red-100' : 'bg-emerald-50 border-emerald-100'}`}>
+                <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black ${g === 'Đã nghỉ học' ? 'bg-red-700 text-white' : 'bg-emerald-700 text-white'}`}>
+                  {g === 'Đã nghỉ học' ? 'N' : `N${g}`}
+                </span>
+                <span className={`text-sm font-black ${g === 'Đã nghỉ học' ? 'text-red-900' : 'text-emerald-900'}`}>
+                  {stats.byGrade[g]} <span className="text-[10px] font-medium opacity-50">HS</span>
+                </span>
               </div>
             ))}
             {stats.sortedGrades.length === 0 && <p className="text-xs italic text-gray-400">Chưa có dữ liệu học sinh</p>}
@@ -261,6 +285,8 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
           >
             <option value="all">TẤT CẢ NHÓM</option>
             {GRADES.map(g => <option key={g} value={g}>NHÓM {g}</option>)}
+            <option value="Kèm riêng">KÈM RIÊNG</option>
+            <option value="Đã nghỉ học">ĐÃ NGHỈ HỌC</option>
           </select>
         </div>
       </div>
@@ -283,11 +309,13 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
           </thead>
           <tbody className="divide-y divide-emerald-50 text-sm font-medium text-gray-700">
             {filteredStudents.length > 0 ? filteredStudents.map((s, idx) => (
-              <tr key={s.stt} className="hover:bg-emerald-50/50 transition-colors group">
+              <tr key={s.stt} className={`hover:bg-emerald-50/50 transition-colors group ${s.grade === 'Đã nghỉ học' ? 'bg-red-50/30 opacity-70 italic' : ''}`}>
                 <td className="px-4 py-4 font-bold text-emerald-900/40">{idx + 1}</td>
-                <td className="px-4 py-4 font-bold text-emerald-900">{s.fullName}</td>
+                <td className={`px-4 py-4 font-bold ${s.grade === 'Đã nghỉ học' ? 'text-red-900' : 'text-emerald-900'}`}>{s.fullName}</td>
                 <td className="px-4 py-4 text-center">
-                  <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full text-[10px] font-black">NHÓM {s.grade}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${s.grade === 'Đã nghỉ học' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                    {s.grade === 'Đã nghỉ học' ? 'Nghỉ học' : `Nhóm ${s.grade}`}
+                  </span>
                 </td>
                 <td className="px-4 py-4">{s.className}</td>
                 <td className="px-4 py-4">
@@ -360,6 +388,8 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
                         <label className="block text-[9px] font-black uppercase text-emerald-700 mb-1 ml-1">Nhóm</label>
                         <select className="w-full border-2 border-white bg-white rounded-xl p-3 outline-none focus:border-emerald-500 font-bold shadow-sm appearance-none" value={editingStudent.grade} onChange={(e) => setEditingStudent({...editingStudent, grade: e.target.value})}>
                           {GRADES.map(g => <option key={g} value={g}>Nhóm {g}</option>)}
+                          <option value="Kèm riêng">Kèm riêng</option>
+                          <option value="Đã nghỉ học">Đã nghỉ học</option>
                         </select>
                       </div>
                       <div>
@@ -443,9 +473,19 @@ const TabStudentList: React.FC<TabStudentListProps> = ({ students, teacherSchedu
               </div>
             </div>
 
-            <div className="flex justify-end gap-4 mt-8 border-t border-emerald-50 pt-6">
-              <button onClick={() => setEditingStudent(null)} className="px-6 py-3 text-gray-500 font-black uppercase text-xs hover:text-red-500 transition-colors tracking-widest">Hủy bỏ</button>
-              <button onClick={handleUpdate} className="px-10 py-3 bg-emerald-700 text-white rounded-xl font-black uppercase text-xs shadow-xl hover:bg-emerald-800 transition transform active:scale-95 tracking-[0.1em]">Lưu toàn bộ thay đổi</button>
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4 mt-8 border-t border-emerald-50 pt-6">
+              <button 
+                onClick={handleWithdraw}
+                className="w-full md:w-auto px-6 py-3 bg-red-600 text-white rounded-xl font-black uppercase text-xs shadow-lg hover:bg-red-700 transition transform active:scale-95 tracking-widest flex items-center justify-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6" /></svg>
+                Học sinh nghỉ học
+              </button>
+              
+              <div className="flex gap-4 w-full md:w-auto">
+                <button onClick={() => setEditingStudent(null)} className="flex-1 md:flex-none px-6 py-3 text-gray-500 font-black uppercase text-xs hover:text-red-500 transition-colors tracking-widest">Hủy bỏ</button>
+                <button onClick={handleUpdate} className="flex-1 md:flex-none px-10 py-3 bg-emerald-700 text-white rounded-xl font-black uppercase text-xs shadow-xl hover:bg-emerald-800 transition transform active:scale-95 tracking-[0.1em]">Lưu toàn bộ thay đổi</button>
+              </div>
             </div>
           </div>
         </div>
