@@ -1,7 +1,5 @@
-
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { Student } from '../types';
-import { generateTuitionReport, generateIndividualReport } from '../services/geminiService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { COPYRIGHT } from '../constants';
 
@@ -11,13 +9,68 @@ interface TabStatisticsProps {
 
 const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
-  const [reportContent, setReportContent] = useState<string>('');
-  const [isGenerating, setIsGenerating] = useState<boolean>(false);
-  const [reportType, setReportType] = useState<'general' | 'individual' | null>(null);
+  const [isGeneratingImage, setIsGeneratingImage] = useState<boolean>(false);
+
+  const studentReportRef = useRef<HTMLDivElement>(null);
+  const teacherReportRef = useRef<HTMLDivElement>(null);
 
   const currentMonth = new Date().getMonth() + 1;
   const currentYear = new Date().getFullYear();
   const today = new Date();
+
+  // Helper to extract the last name (common name) from full name
+  const getLastName = (fullName: string) => {
+    if (!fullName) return '';
+    const parts = fullName.trim().split(/\s+/);
+    return parts.length > 0 ? parts[parts.length - 1] : '';
+  };
+
+  const gradeWeight = (grade: string) => {
+    if (grade === 'Đã thôi học') return 1000;
+    if (grade === 'Kèm riêng') return 999;
+    const n = parseInt(grade);
+    return isNaN(n) ? 500 : n;
+  };
+
+  // Helper function to calculate student metrics for reports
+  const getStudentMetrics = (s: Student) => {
+    let scheduleDays: string[] = [];
+    try { scheduleDays = JSON.parse(s.schedule || '[]'); } catch(e) {}
+    
+    let absentDays: string[] = [];
+    try { absentDays = JSON.parse(s.attendance || '[]'); } catch(e) {}
+
+    let paidMonths: string[] = [];
+    try { paidMonths = JSON.parse(s.tuition || '[]'); } catch(e) {}
+
+    const scheduledUpToNow = scheduleDays.filter(d => new Date(d) <= today).length;
+    const absents = absentDays.length;
+    const actualAttendance = Math.max(0, scheduledUpToNow - absents);
+
+    // Detailed tuition status
+    const formattedPaidMonths = paidMonths.sort((a, b) => {
+      const [mA, yA] = a.split('/').map(Number);
+      const [mB, yB] = b.split('/').map(Number);
+      if (yA !== yB) return yA - yB;
+      return mA - mB;
+    }).map(item => {
+      const [m, y] = item.split('/');
+      return `T${m.padStart(2, '0')}/${y}`;
+    });
+
+    const currentKey = `${currentMonth}/${currentYear}`;
+    const isPaidCurrent = paidMonths.includes(currentKey);
+
+    return {
+      scheduledUpToNow,
+      absents,
+      absentDates: absentDays,
+      actualAttendance,
+      paidCount: paidMonths.length,
+      paidMonthsList: formattedPaidMonths,
+      isPaidCurrent
+    };
+  };
 
   // Thống kê tình trạng học phí
   const tuitionStatus = useMemo(() => {
@@ -49,58 +102,30 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
     return { paidList, unpaidThisMonth, debtList };
   }, [students, currentMonth, currentYear]);
 
-  // Phân tích chi tiết học sinh được chọn
+  // Phân tích chi tiết học sinh được chọn (Dùng cho UI và báo cáo đơn lẻ)
   const studentAnalysis = useMemo(() => {
     if (!selectedStudent) return null;
-
-    let scheduleDays: string[] = [];
-    try { scheduleDays = JSON.parse(selectedStudent.schedule || '[]'); } catch(e) {}
     
-    let absentDays: string[] = [];
-    try { absentDays = JSON.parse(selectedStudent.attendance || '[]'); } catch(e) {}
-
-    let paidMonths: string[] = [];
-    try { paidMonths = JSON.parse(selectedStudent.tuition || '[]'); } catch(e) {}
-
-    const scheduledUpToNow = scheduleDays.filter(d => new Date(d) <= today).length;
-    const absents = absentDays.length;
-    const actualAttendance = Math.max(0, scheduledUpToNow - absents);
-
+    const metrics = getStudentMetrics(selectedStudent);
+    
     const startDate = new Date(selectedStudent.startDate);
-    const monthsDiff = (today.getFullYear() - startDate.getFullYear()) * 12 + (today.getMonth() - startDate.getMonth()) + 1;
-    
-    // Tính toán các tháng chưa đóng phí
     const unpaidMonthsList: string[] = [];
     let temp = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
     while (temp < new Date(today.getFullYear(), today.getMonth() + 1, 1)) {
       const checkKey = `${temp.getMonth() + 1}/${temp.getFullYear()}`;
-      if (!paidMonths.includes(checkKey)) {
-        unpaidMonthsList.push(`T${String(temp.getMonth() + 1).padStart(2, '0')}/${temp.getFullYear()}`);
-      }
+      try {
+        const paidMonths = JSON.parse(selectedStudent.tuition || '[]');
+        if (!paidMonths.includes(checkKey)) {
+          unpaidMonthsList.push(`T${String(temp.getMonth() + 1).padStart(2, '0')}/${temp.getFullYear()}`);
+        }
+      } catch(e) {}
       temp.setMonth(temp.getMonth() + 1);
     }
 
-    // Format paid months for display
-    const formattedPaidMonths = paidMonths.sort((a, b) => {
-      const [mA, yA] = a.split('/').map(Number);
-      const [mB, yB] = b.split('/').map(Number);
-      if (yA !== yB) return yA - yB;
-      return mA - mB;
-    }).map(item => {
-      const [m, y] = item.split('/');
-      return `T${m.padStart(2, '0')}/${y}`;
-    });
-
     return {
-      scheduledUpToNow,
-      absents,
-      absentDates: absentDays,
-      actualAttendance,
-      paidCount: paidMonths.length,
-      paidMonthsList: formattedPaidMonths,
+      ...metrics,
       unpaidCount: unpaidMonthsList.length,
-      unpaidMonthsList,
-      totalMonths: monthsDiff
+      unpaidMonthsList
     };
   }, [selectedStudent, today]);
 
@@ -110,125 +135,213 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
     { name: 'Nợ phí', value: tuitionStatus.debtList.length, color: '#c2410c' }
   ];
 
-  // Hàm tạo báo cáo tổng hợp
-  const handleGenerateGeneralReport = async () => {
-    setReportType('general');
-    setIsGenerating(true);
-    const content = await generateTuitionReport(students);
-    setReportContent(content);
-    setIsGenerating(false);
-  };
-
-  // Hàm tạo báo cáo cá nhân
-  const handleGenerateIndividualReport = async () => {
-    if (!selectedStudent || !studentAnalysis) return;
-    setReportType('individual');
-    setIsGenerating(true);
-    const content = await generateIndividualReport(selectedStudent, studentAnalysis);
-    setReportContent(content);
-    setIsGenerating(false);
-  };
-
-  // Hàm tải file PDF báo cáo
-  const handleDownloadPDF = () => {
-    const element = document.querySelector('.report-canvas');
-    if (!element) return;
-    
-    const opt = {
-      margin: 20,
-      filename: `Bao_cao_${reportType === 'general' ? 'Lop_hoc' : selectedStudent?.fullName || 'HS'}_${today.getTime()}.pdf`,
-      image: { type: 'jpeg', quality: 1.0 },
-      html2canvas: { 
-        scale: 4, 
-        useCORS: true, 
-        letterRendering: true,
-        logging: false,
-        backgroundColor: '#ffffff'
-      },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true }
-    };
-    
-    // @ts-ignore
-    html2pdf().set(opt).from(element).save();
-  };
-
-  // Hàm format Markdown sang JSX
-  const formatMarkdown = (text: string) => {
-    const sanitizedText = text
-      .replace(/\*\*/g, '') 
-      .replace(/###?\s*/g, '')
-      .replace(/BẢNG\s*\d+:?/gi, '')
-      .trim();
-    
-    const lines = sanitizedText.split('\n');
-    const result: React.ReactNode[] = [];
-    let tableLines: string[] = [];
-
-    const flushTable = (key: number) => {
-        if (tableLines.length === 0) return null;
-        const currentTable = [...tableLines];
-        tableLines = [];
-        return (
-            <div key={`table-${key}`} className="overflow-x-auto my-4 border border-black">
-                <table className="min-w-full border-collapse">
-                    <tbody>
-                        {currentTable.map((tLine, idx) => {
-                            const cells = tLine.split('|').filter(c => c.trim() !== '' || (tLine.startsWith('|') && tLine.endsWith('|'))).map(c => c.trim());
-                            if (cells.length === 0) return null;
-                            const isHeader = idx === 0;
-                            const isDivider = tLine.includes('---');
-                            if (isDivider) return null;
-
-                            return (
-                                <tr key={idx} className={isHeader ? "bg-gray-100 font-bold" : "border-t border-black"}>
-                                    {cells.map((cell, cIdx) => (
-                                        <td key={cIdx} className="border border-black px-3 py-2 text-[11pt] text-black leading-tight">
-                                            {cell}
-                                        </td>
-                                    ))}
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
-            </div>
-        );
-    };
-
-    let titleCount = 0;
-    lines.forEach((line, i) => {
-      const trimmedLine = line.trim();
-      const isTableLine = trimmedLine.startsWith('|');
-      
-      if (isTableLine) {
-        tableLines.push(line);
-      } else {
-        if (tableLines.length > 0) {
-          result.push(flushTable(i));
-        }
-        if (trimmedLine) {
-           const isTitle = (/^[A-Z0-9À-Ỹ\s\-]+$/.test(trimmedLine) || trimmedLine.toUpperCase().startsWith('TIÊU ĐỀ')) && trimmedLine.length < 120;
-           if (isTitle) titleCount++;
-           
-           result.push(
-             <p key={i} className={`mb-2 text-black leading-relaxed ${isTitle ? `text-[14pt] font-bold uppercase text-left ${titleCount > 1 ? 'mt-6' : 'mt-2'}` : 'text-[13pt]'}`}>
-               {trimmedLine}
-             </p>
-           );
-        }
-      }
-    });
-    
-    if (tableLines.length > 0) {
-      result.push(flushTable(9999));
+  const handleDownloadJPEG = async (ref: React.RefObject<HTMLDivElement>, fileName: string) => {
+    if (!ref.current) return;
+    setIsGeneratingImage(true);
+    try {
+      // @ts-ignore
+      const canvas = await window.html2canvas(ref.current, {
+        scale: 2, 
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false
+      });
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
+      const link = document.createElement('a');
+      link.download = `${fileName}.jpg`;
+      link.href = dataUrl;
+      link.click();
+    } catch (error) {
+      console.error("Lỗi khi tạo ảnh:", error);
+      alert("Không thể tạo ảnh báo cáo.");
+    } finally {
+      setIsGeneratingImage(false);
     }
-
-    return result;
   };
 
   return (
     <div className="space-y-10">
-      {/* Dashboard Summary Widgets */}
+      {/* Off-screen Templates for JPEG Generation */}
+      <div style={{ position: 'fixed', left: '-10000px', top: 0, zIndex: -1 }}>
+        {/* Student Individual Template */}
+        {selectedStudent && studentAnalysis && (
+          <div 
+            ref={studentReportRef}
+            className="w-[800px] bg-white p-12 text-black flex flex-col gap-8 border-[12px] border-emerald-900"
+          >
+            <div className="flex justify-between items-center border-b-4 border-emerald-900 pb-6">
+              <div>
+                <h1 className="text-3xl font-black text-emerald-900 uppercase">PHIẾU BÁO CÁO HỌC TẬP</h1>
+                <p className="text-lg font-bold text-gray-600">GIÁO VIÊN: LÊ XUÂN NƯỚC</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xl font-black">{selectedStudent.fullName}</p>
+                <p className="text-sm font-bold text-emerald-700 uppercase">NHÓM {selectedStudent.grade} - LỚP {selectedStudent.className}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-6">
+               <div className="bg-emerald-50 p-6 rounded-3xl border-2 border-emerald-200 text-center">
+                  <p className="text-[12px] font-black text-emerald-800 uppercase mb-2">Số buổi theo lịch</p>
+                  <p className="text-4xl font-black text-emerald-900">{studentAnalysis.scheduledUpToNow}</p>
+               </div>
+               <div className="bg-blue-50 p-6 rounded-3xl border-2 border-blue-200 text-center">
+                  <p className="text-[12px] font-black text-blue-800 uppercase mb-2">Số buổi đã học</p>
+                  <p className="text-4xl font-black text-blue-900">{studentAnalysis.actualAttendance}</p>
+               </div>
+               <div className="bg-red-50 p-6 rounded-3xl border-2 border-red-200 text-center">
+                  <p className="text-[12px] font-black text-red-800 uppercase mb-2">Số buổi vắng mặt</p>
+                  <p className="text-4xl font-black text-red-900">{studentAnalysis.absents}</p>
+               </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-6">
+               <div className="bg-emerald-900 text-white p-8 rounded-[2.5rem] flex flex-col justify-between">
+                  <p className="text-sm font-black uppercase opacity-60 mb-4 tracking-widest">Tình trạng học phí</p>
+                  <div className="flex justify-between items-end">
+                    <div>
+                      <p className="text-4xl font-black">{studentAnalysis.paidCount}</p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest">Tháng đã đóng</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-4xl font-black text-emerald-400">{studentAnalysis.unpaidCount}</p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest">Tháng chưa đóng</p>
+                    </div>
+                  </div>
+               </div>
+               <div className="bg-gray-50 p-6 rounded-[2.5rem] border-2 border-gray-100 flex flex-col gap-3">
+                  <p className="text-[12px] font-black text-gray-800 uppercase border-b border-gray-200 pb-2">Thông tin liên hệ</p>
+                  <p className="text-sm"><b>SĐT:</b> {selectedStudent.phone1}</p>
+                  <p className="text-sm"><b>Ngày bắt đầu:</b> {selectedStudent.startDate}</p>
+                  <p className="text-[10px] italic text-gray-400 mt-auto">{COPYRIGHT}</p>
+               </div>
+            </div>
+
+            <div className="space-y-6">
+              {studentAnalysis.absentDates.length > 0 && (
+                <div className="bg-red-50/50 p-6 rounded-3xl border border-red-100">
+                  <p className="text-sm font-black text-red-800 uppercase mb-3">Chi tiết các ngày vắng:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {studentAnalysis.absentDates.map(d => (
+                      <span key={d} className="bg-white border border-red-200 px-3 py-1 rounded-xl text-xs font-bold text-red-700">{d}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              <div className="bg-emerald-50/50 p-6 rounded-3xl border border-emerald-100">
+                <p className="text-sm font-black text-emerald-800 uppercase mb-3">Danh sách tháng chưa đóng phí:</p>
+                <div className="flex flex-wrap gap-2">
+                  {studentAnalysis.unpaidMonthsList.length > 0 ? studentAnalysis.unpaidMonthsList.map(m => (
+                    <span key={m} className="bg-white border border-emerald-200 px-3 py-1 rounded-xl text-xs font-bold text-emerald-700">{m}</span>
+                  )) : (
+                    <span className="text-xs italic text-gray-400">Đã hoàn thành toàn bộ học phí tới hiện tại</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Teacher Class Report Template - Sorting Update */}
+        <div 
+          ref={teacherReportRef} 
+          className="w-[1200px] bg-white p-12 text-black flex flex-col gap-10 border-[16px] border-emerald-900"
+        >
+            <div className="flex justify-between items-end border-b-8 border-emerald-900 pb-8">
+                <div>
+                  <h1 className="text-5xl font-black text-emerald-900 uppercase tracking-tighter">BÁO CÁO TỔNG QUAN LỚP HỌC</h1>
+                  <p className="text-2xl font-bold text-gray-500 uppercase mt-2">GIÁO VIÊN: LÊ XUÂN NƯỚC | THÁNG {currentMonth}/{currentYear}</p>
+                </div>
+                <div className="text-right text-gray-400">
+                  <p className="text-sm font-black uppercase tracking-[0.3em]">{COPYRIGHT}</p>
+                </div>
+            </div>
+            
+            <div className="grid grid-cols-4 gap-8">
+                <div className="bg-emerald-900 text-white p-10 rounded-[2.5rem] shadow-xl">
+                    <p className="text-[12px] font-black uppercase opacity-60 mb-2 tracking-widest">Tổng số học sinh</p>
+                    <p className="text-6xl font-black">{students.length}</p>
+                </div>
+                <div className="bg-emerald-50 border-4 border-emerald-100 p-10 rounded-[2.5rem] shadow-lg">
+                    <p className="text-[12px] font-black uppercase text-emerald-800 opacity-60 mb-2 tracking-widest">Đã đóng T.{currentMonth}</p>
+                    <p className="text-6xl font-black text-emerald-900">{tuitionStatus.paidList.length}</p>
+                </div>
+                <div className="bg-red-50 border-4 border-red-100 p-10 rounded-[2.5rem] shadow-lg">
+                    <p className="text-[12px] font-black uppercase text-red-800 opacity-60 mb-2 tracking-widest">Chưa đóng T.{currentMonth}</p>
+                    <p className="text-6xl font-black text-red-700">{tuitionStatus.unpaidThisMonth.length}</p>
+                </div>
+                <div className="bg-orange-50 border-4 border-orange-100 p-10 rounded-[2.5rem] shadow-lg">
+                    <p className="text-[12px] font-black uppercase text-orange-800 opacity-60 mb-2 tracking-widest">Học sinh nợ phí cũ</p>
+                    <p className="text-6xl font-black text-orange-700">{tuitionStatus.debtList.length}</p>
+                </div>
+            </div>
+
+            <div className="space-y-6">
+                <h2 className="text-2xl font-black text-emerald-900 uppercase border-l-8 border-emerald-500 pl-4 py-1">DANH SÁCH CHI TIẾT HỌC SINH</h2>
+                <div className="rounded-[2rem] border-4 border-emerald-100 overflow-hidden shadow-inner">
+                  <table className="w-full border-collapse">
+                    <thead className="bg-emerald-900 text-white text-[11px] font-black uppercase tracking-widest">
+                      <tr>
+                        <th className="px-4 py-5 text-left">Họ tên</th>
+                        <th className="px-4 py-5 text-center">Nhóm-Lớp</th>
+                        <th className="px-4 py-5 text-center">Ngày BĐ</th>
+                        <th className="px-4 py-5 text-center">Đã học</th>
+                        <th className="px-4 py-5 text-center">Vắng</th>
+                        <th className="px-4 py-5 text-left">Số điện thoại</th>
+                        <th className="px-4 py-5 text-left">Tình trạng học phí</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-emerald-50 bg-white">
+                      {[...students].sort((a, b) => {
+                        // 1. Nhóm
+                        const gA = gradeWeight(String(a.grade));
+                        const gB = gradeWeight(String(b.grade));
+                        if (gA !== gB) return gA - gB;
+
+                        // 2. Tên
+                        const nameA = getLastName(a.fullName || '');
+                        const nameB = getLastName(b.fullName || '');
+                        return nameA.localeCompare(nameB, 'vi', { sensitivity: 'base' });
+                      }).map(s => {
+                        const m = getStudentMetrics(s);
+                        return (
+                          <tr key={s.stt} className="text-xs">
+                            <td className="px-4 py-4 font-black text-emerald-950 border-r border-emerald-50">{s.fullName}</td>
+                            <td className="px-4 py-4 text-center border-r border-emerald-50">
+                              <span className="font-bold text-emerald-700">{s.grade} - {s.className}</span>
+                            </td>
+                            <td className="px-4 py-4 text-center font-bold text-gray-400 border-r border-emerald-50">{s.startDate}</td>
+                            <td className="px-4 py-4 text-center border-r border-emerald-50 font-black text-blue-700">{m.actualAttendance}</td>
+                            <td className="px-4 py-4 text-center border-r border-emerald-50 font-black text-red-500">{m.absents}</td>
+                            <td className="px-4 py-4 font-bold border-r border-emerald-50">{s.phone1}</td>
+                            <td className="px-4 py-4">
+                              <div className="flex flex-wrap gap-1">
+                                {m.paidMonthsList.slice(-4).map(month => (
+                                  <span key={month} className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-[8px] font-black border border-blue-100 whitespace-nowrap">
+                                    {month}
+                                  </span>
+                                ))}
+                                {m.paidMonthsList.length > 4 && <span className="text-[8px] font-bold opacity-30">...</span>}
+                                {m.paidMonthsList.length === 0 && <span className="text-[9px] text-red-400 italic">Chưa đóng</span>}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+            </div>
+            
+            <div className="flex justify-between items-center text-gray-300 italic pt-6 border-t border-gray-100">
+               <p className="text-sm font-bold">NGÀY LẬP: {today.toLocaleDateString('vi-VN')}</p>
+               <p className="text-sm font-bold uppercase tracking-widest">Hệ thống quản lý Lê Xuân Nước</p>
+            </div>
+        </div>
+      </div>
+
+      {/* Visible Dashboard Summary Widgets */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 no-print">
         <div className="bg-emerald-50 border border-emerald-200 p-6 rounded-2xl shadow-sm">
           <p className="text-[10px] font-black uppercase text-emerald-800 opacity-60 mb-1">Đã đóng học phí T.{currentMonth}</p>
@@ -273,12 +386,15 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
         <div className="flex-1 bg-white p-8 rounded-3xl border border-emerald-100 shadow-xl space-y-6">
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-black text-emerald-900 uppercase tracking-widest border-l-4 border-emerald-500 pl-4">Toàn bộ lớp học</h2>
-            <button 
-              onClick={handleGenerateGeneralReport}
-              className="bg-emerald-700 hover:bg-emerald-800 text-white font-black px-4 py-2 rounded-xl text-[10px] uppercase transition shadow-md"
-            >
-              BÁO CÁO TOÀN BỘ
-            </button>
+            <div className="flex gap-2">
+              <button 
+                disabled={isGeneratingImage}
+                onClick={() => handleDownloadJPEG(teacherReportRef, `Bao_cao_Lop_hoc_T${currentMonth}_${currentYear}`)}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white font-black px-4 py-2 rounded-xl text-[10px] uppercase transition shadow-md disabled:opacity-50"
+              >
+                {isGeneratingImage ? "ĐANG TẠO..." : "XUẤT ẢNH (JPEG)"}
+              </button>
+            </div>
           </div>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -312,71 +428,36 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
             {selectedStudent && studentAnalysis ? (
               <div className="animate-fadeIn space-y-6 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
                 <div className="grid grid-cols-1 gap-4">
-                  {/* Box 1: Ngày bắt đầu */}
                   <div className="bg-emerald-800/50 p-5 rounded-2xl border border-emerald-700 flex justify-between items-center shadow-inner">
                     <span className="text-[10px] font-black uppercase text-emerald-400 tracking-wider">Ngày bắt đầu học:</span>
                     <span className="font-black text-xl text-white">{selectedStudent.startDate}</span>
                   </div>
                   
-                  {/* Box 2: Số buổi vắng học */}
                   <div className="bg-red-900/60 p-5 rounded-2xl border border-red-500/50 space-y-3 shadow-lg transform hover:scale-[1.01] transition">
                     <div className="flex justify-between items-center">
                       <p className="text-[10px] font-black uppercase text-red-200 tracking-widest">Số buổi vắng học</p>
                       <p className="text-3xl font-black text-red-400 drop-shadow-sm">{studentAnalysis.absents}</p>
                     </div>
-                    {studentAnalysis.absentDates.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 pt-2 border-t border-red-800/50">
-                        {studentAnalysis.absentDates.map(date => (
-                          <span key={date} className="bg-red-950/40 text-red-300 text-[9px] font-bold px-2 py-0.5 rounded border border-red-800/30 whitespace-nowrap">
-                            {date}
-                          </span>
-                        ))}
-                      </div>
-                    )}
                   </div>
 
-                  {/* Box 3: Số tháng đã đóng phí */}
                   <div className="bg-emerald-700/40 p-5 rounded-2xl border border-emerald-400/50 space-y-3 shadow-lg transform hover:scale-[1.01] transition">
                     <div className="flex justify-between items-center">
                       <p className="text-[10px] font-black uppercase text-emerald-200 tracking-widest">Số tháng đã đóng phí</p>
                       <p className="text-3xl font-black text-emerald-300 drop-shadow-sm">{studentAnalysis.paidCount}</p>
                     </div>
-                    {studentAnalysis.paidMonthsList.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 pt-2 border-t border-emerald-800/50">
-                        {studentAnalysis.paidMonthsList.map(month => (
-                          <span key={month} className="bg-emerald-950/40 text-emerald-300 text-[9px] font-bold px-2 py-0.5 rounded border border-emerald-800/30 whitespace-nowrap">
-                            {month}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Box 4: Số tháng chưa đóng phí */}
-                  <div className="bg-amber-600/40 p-5 rounded-2xl border border-amber-400/50 space-y-3 shadow-lg transform hover:scale-[1.01] transition">
-                    <div className="flex justify-between items-center">
-                      <p className="text-[10px] font-black uppercase text-amber-200 tracking-widest">Số tháng chưa đóng</p>
-                      <p className="text-3xl font-black text-amber-400 drop-shadow-sm">{studentAnalysis.unpaidCount}</p>
-                    </div>
-                    {studentAnalysis.unpaidMonthsList.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 pt-2 border-t border-amber-800/50">
-                        {studentAnalysis.unpaidMonthsList.map(month => (
-                          <span key={month} className="bg-amber-950/40 text-amber-300 text-[9px] font-bold px-2 py-0.5 rounded border border-amber-800/30 whitespace-nowrap">
-                            {month}
-                          </span>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 </div>
 
-                <button 
-                  onClick={handleGenerateIndividualReport}
-                  className="w-full bg-white text-emerald-900 hover:bg-emerald-50 font-black py-4 rounded-2xl shadow-xl transition uppercase text-xs tracking-widest flex items-center justify-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
-                  TẠO PHIẾU CÁ NHÂN
-                </button>
+                <div className="flex gap-3">
+                  <button 
+                    disabled={isGeneratingImage}
+                    onClick={() => handleDownloadJPEG(studentReportRef, `Phieu_Bao_Cao_${selectedStudent.fullName.replace(/\s+/g, '_')}`)}
+                    className="flex-1 bg-emerald-500 text-white hover:bg-emerald-400 font-black py-4 rounded-2xl shadow-xl transition uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2-2v12a2 2 0 002 2z" /></svg>
+                    {isGeneratingImage ? "ĐANG TẠO..." : "XUẤT ẢNH (JPEG)"}
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="text-center py-20 border-2 border-dashed border-emerald-700 rounded-3xl opacity-30">
@@ -386,52 +467,6 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
           </div>
         </div>
       </div>
-
-      {/* AI Report Generation UI */}
-      {isGenerating && (
-        <div className="flex flex-col items-center justify-center py-12 bg-white rounded-3xl border border-emerald-100 shadow-xl no-print">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-emerald-900 border-opacity-50 mb-4"></div>
-          <p className="text-emerald-900 font-black uppercase text-xs tracking-[0.2em] animate-pulse">Đang phân tích dữ liệu & khởi tạo báo cáo AI...</p>
-        </div>
-      )}
-
-      {reportContent && !isGenerating && (
-        <div className="space-y-6 animate-fadeIn">
-          <div className="flex justify-end no-print">
-             <button 
-               onClick={handleDownloadPDF}
-               className="bg-emerald-900 text-white font-black px-6 py-3 rounded-xl shadow-lg hover:bg-emerald-950 transition transform active:scale-95 flex items-center gap-3 uppercase text-xs tracking-widest"
-             >
-               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-               XUẤT FILE PDF BÁO CÁO
-             </button>
-          </div>
-
-          <div className="report-canvas bg-white p-12 md:p-16 rounded-[2rem] shadow-2xl border border-gray-100 min-h-[1000px] text-black">
-             {/* PDF Report Header */}
-             <div className="border-b-4 border-black pb-6 mb-10 flex justify-between items-end">
-                <div>
-                  <h1 className="text-2xl font-black uppercase tracking-tight">HỆ THỐNG QUẢN LÝ LỚP HỌC</h1>
-                  <p className="text-sm font-bold uppercase tracking-widest text-gray-600">GIÁO VIÊN: LÊ XUÂN NƯỚC</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[10pt] font-bold">Ngày lập báo cáo: {today.toLocaleDateString('vi-VN')}</p>
-                  <p className="text-[10pt] italic">Mã báo cáo: #{today.getTime()}</p>
-                </div>
-             </div>
-
-             {/* AI Generated Markdown Content rendered to JSX */}
-             <div className="report-content">
-                {formatMarkdown(reportContent)}
-             </div>
-
-             <div className="mt-16 pt-8 border-t border-gray-200 flex justify-between items-center italic text-gray-400 text-[9pt]">
-                <p>{COPYRIGHT}</p>
-                <p>Trang 1/1</p>
-             </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

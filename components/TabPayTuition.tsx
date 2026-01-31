@@ -112,6 +112,7 @@ const TabPayTuition: React.FC<TabPayTuitionProps> = ({ students, onRefresh }) =>
                   <option value="all">TẤT CẢ NHÓM</option>
                   {GRADES.map(g => <option key={g} value={g}>NHÓM {g}</option>)}
                   <option value="Kèm riêng">KÈM RIÊNG</option>
+                  <option value="Đã thôi học">ĐÃ THÔI HỌC</option>
                 </select>
               </div>
               <div>
@@ -143,7 +144,7 @@ const TabPayTuition: React.FC<TabPayTuitionProps> = ({ students, onRefresh }) =>
                   <div className="text-left">
                     <p className="font-black text-sm uppercase">{s.fullName}</p>
                     <p className={`text-[10px] uppercase font-bold tracking-tighter ${selectedStudentStt === s.stt ? 'text-emerald-300' : 'text-emerald-500'}`}>
-                      Lớp {s.className} - {s.grade === 'Kèm riêng' ? 'Kèm riêng' : `Nhóm ${s.grade}`}
+                      Lớp {s.className} - {s.grade === 'Đã thôi học' ? 'Thôi học' : s.grade === 'Kèm riêng' ? 'Kèm riêng' : `Nhóm ${s.grade}`}
                     </p>
                   </div>
                   <div className={`text-[10px] font-mono px-2 py-1 rounded ${selectedStudentStt === s.stt ? 'bg-emerald-800' : 'bg-emerald-50 text-emerald-700'}`}>

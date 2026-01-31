@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { Student } from '../types';
 import { updateStudent } from '../services/apiService';
@@ -84,14 +83,39 @@ const TabAttendance: React.FC<TabAttendanceProps> = ({ students, onRefresh }) =>
     onRefresh();
   };
 
-  // Lọc danh sách học sinh
+  // Lọc và Sắp xếp danh sách học sinh
   const filteredStudents = useMemo(() => {
-    return students.filter(s => {
+    const result = students.filter(s => {
       const matchGrade = filterGrade === 'all' || s.grade.toString() === filterGrade.toString();
       const matchSearch = s.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           s.phone1.includes(searchTerm) || 
                           s.className.toLowerCase().includes(searchTerm.toLowerCase());
       return matchGrade && matchSearch;
+    });
+
+    const getLastName = (fullName: string) => {
+      if (!fullName) return '';
+      const parts = fullName.trim().split(/\s+/);
+      return parts.length > 0 ? parts[parts.length - 1] : '';
+    };
+
+    const gradeWeight = (grade: string) => {
+      if (grade === 'Đã thôi học') return 1000;
+      if (grade === 'Kèm riêng') return 999;
+      const n = parseInt(grade);
+      return isNaN(n) ? 500 : n;
+    };
+
+    return result.sort((a, b) => {
+      // 1. Sắp xếp theo Nhóm (Primary)
+      const gA = gradeWeight(String(a.grade));
+      const gB = gradeWeight(String(b.grade));
+      if (gA !== gB) return gA - gB;
+
+      // 2. Sắp xếp theo Tên (Secondary)
+      const nameA = getLastName(a.fullName || '');
+      const nameB = getLastName(b.fullName || '');
+      return nameA.localeCompare(nameB, 'vi', { sensitivity: 'base' });
     });
   }, [students, filterGrade, searchTerm]);
 
@@ -134,6 +158,7 @@ const TabAttendance: React.FC<TabAttendanceProps> = ({ students, onRefresh }) =>
               <option value="all">TẤT CẢ</option>
               {GRADES.map(g => <option key={g} value={g}>NHÓM {g}</option>)}
               <option value="Kèm riêng">KÈM RIÊNG</option>
+              <option value="Đã thôi học">ĐÃ THÔI HỌC</option>
             </select>
           </div>
 
@@ -197,7 +222,7 @@ const TabAttendance: React.FC<TabAttendanceProps> = ({ students, onRefresh }) =>
                     : 'bg-orange-50 border-orange-500 shadow-md scale-[1.02] border-dashed' // Vừa mới stick thêm vắng
                   : isAlreadyAbsent
                     ? 'bg-emerald-50 border-emerald-500 border-dashed opacity-80' // Đang chọn để XÓA vắng (chuyển thành có mặt)
-                    : 'bg-white border-gray-100 hover:border-emerald-200' // Có mặt bình thường
+                    : 'bg-white border-gray-100 hover:border-emerald-200 text-emerald-900' // Có mặt bình thường
               }`}
             >
               <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg transition-colors ${
