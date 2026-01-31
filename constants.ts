@@ -16,4 +16,4 @@ export const VALID_USERS = [
 
 export const GRADES = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
 
-export const COPYRIGHT = "Thiết kế & Bản quyền thuộc về Lê Hoà Hiệp - 0983.676.470";
+export const COPYRIGHT = "Create by Hoà Hiệp";
