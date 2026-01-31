@@ -481,17 +481,37 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
                     <span className="font-black text-xl text-white">{selectedStudent.startDate}</span>
                   </div>
                   
-                  <div className="bg-red-900/60 p-5 rounded-2xl border border-red-500/50 space-y-3 shadow-lg transform hover:scale-[1.01] transition">
-                    <div className="flex justify-between items-center">
-                      <p className="text-[10px] font-black uppercase text-red-200 tracking-widest">Số buổi vắng học</p>
-                      <p className="text-3xl font-black text-red-400 drop-shadow-sm">{studentAnalysis.absents}</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Số buổi đã dạy */}
+                    <div className="bg-emerald-800/40 p-5 rounded-2xl border border-emerald-400/30 space-y-3 shadow-lg transform hover:scale-[1.01] transition">
+                      <div className="flex justify-between items-center">
+                        <p className="text-[10px] font-black uppercase text-emerald-200 tracking-widest">Số buổi đã dạy</p>
+                        <p className="text-3xl font-black text-emerald-300 drop-shadow-sm">{studentAnalysis.scheduledUpToNow}</p>
+                      </div>
                     </div>
-                  </div>
+                    
+                    {/* Số buổi đã học */}
+                    <div className="bg-blue-900/40 p-5 rounded-2xl border border-blue-400/30 space-y-3 shadow-lg transform hover:scale-[1.01] transition">
+                      <div className="flex justify-between items-center">
+                        <p className="text-[10px] font-black uppercase text-blue-200 tracking-widest">Số buổi đã học</p>
+                        <p className="text-3xl font-black text-blue-400 drop-shadow-sm">{studentAnalysis.actualAttendance}</p>
+                      </div>
+                    </div>
 
-                  <div className="bg-emerald-700/40 p-5 rounded-2xl border border-emerald-400/50 space-y-3 shadow-lg transform hover:scale-[1.01] transition">
-                    <div className="flex justify-between items-center">
-                      <p className="text-[10px] font-black uppercase text-emerald-200 tracking-widest">Số tháng đã đóng phí</p>
-                      <p className="text-3xl font-black text-emerald-300 drop-shadow-sm">{studentAnalysis.paidCount}</p>
+                    {/* Số buổi vắng học */}
+                    <div className="bg-red-900/60 p-5 rounded-2xl border border-red-500/50 space-y-3 shadow-lg transform hover:scale-[1.01] transition">
+                      <div className="flex justify-between items-center">
+                        <p className="text-[10px] font-black uppercase text-red-200 tracking-widest">Số buổi vắng học</p>
+                        <p className="text-3xl font-black text-red-400 drop-shadow-sm">{studentAnalysis.absents}</p>
+                      </div>
+                    </div>
+
+                    {/* Số tháng đã đóng phí */}
+                    <div className="bg-emerald-700/40 p-5 rounded-2xl border border-emerald-400/50 space-y-3 shadow-lg transform hover:scale-[1.01] transition">
+                      <div className="flex justify-between items-center">
+                        <p className="text-[10px] font-black uppercase text-emerald-200 tracking-widest">Số tháng đã đóng phí</p>
+                        <p className="text-3xl font-black text-emerald-300 drop-shadow-sm">{studentAnalysis.paidCount}</p>
+                      </div>
                     </div>
                   </div>
                 </div>
