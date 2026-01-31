@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { Student } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { COPYRIGHT } from '../constants';
+import { COPYRIGHT, GRADES } from '../constants';
 
 interface TabStatisticsProps {
   students: Student[];
@@ -10,6 +10,10 @@ interface TabStatisticsProps {
 const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState<boolean>(false);
+  
+  // States for search and filter in Individual Info section
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterGrade, setFilterGrade] = useState('all');
 
   const studentReportRef = useRef<HTMLDivElement>(null);
   const teacherReportRef = useRef<HTMLDivElement>(null);
@@ -17,6 +21,16 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
   const currentMonth = new Date().getMonth() + 1;
   const currentYear = new Date().getFullYear();
   const today = new Date();
+
+  // Filtered students for the selection dropdown
+  const filteredSelectionStudents = useMemo(() => {
+    return students.filter(s => {
+      const matchGrade = filterGrade === 'all' || s.grade.toString() === filterGrade.toString();
+      const matchSearch = s.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          s.className.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchGrade && matchSearch;
+    }).sort((a, b) => a.fullName.localeCompare(b.fullName, 'vi'));
+  }, [students, searchTerm, filterGrade]);
 
   // Helper to extract the last name (common name) from full name
   const getLastName = (fullName: string) => {
@@ -173,6 +187,7 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
               <div>
                 <h1 className="text-3xl font-black text-emerald-900 uppercase">PHIẾU BÁO CÁO HỌC TẬP</h1>
                 <p className="text-lg font-bold text-gray-600">GIÁO VIÊN: LÊ XUÂN NƯỚC</p>
+                <p className="text-[11px] font-bold text-gray-500 mt-1 uppercase italic tracking-tight">Lê Xuân Nước - STK: 7620338653 - Ngân hàng BIDV Phú Mỹ</p>
               </div>
               <div className="text-right">
                 <p className="text-xl font-black">{selectedStudent.fullName}</p>
@@ -416,17 +431,50 @@ const TabStatistics: React.FC<TabStatisticsProps> = ({ students }) => {
         {/* Individual Student Selection & Insights */}
         <div className="flex-1 bg-emerald-900 p-8 rounded-3xl shadow-xl space-y-6 text-white overflow-hidden">
           <h2 className="text-xl font-black uppercase tracking-widest border-l-4 border-emerald-400 pl-4">Thông tin học sinh</h2>
-          <div className="space-y-6">
+          
+          <div className="space-y-4">
+            {/* Filters Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="relative">
+                <input 
+                  type="text" 
+                  placeholder="Tìm tên học sinh..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full bg-emerald-800 text-white border-2 border-emerald-700 rounded-xl p-3 pl-10 text-[10px] font-bold outline-none focus:border-emerald-400 transition"
+                />
+                <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <select 
+                value={filterGrade}
+                onChange={(e) => setFilterGrade(e.target.value)}
+                className="bg-emerald-800 text-white border-2 border-emerald-700 rounded-xl p-3 text-[10px] font-black uppercase outline-none focus:border-emerald-400 appearance-none"
+              >
+                <option value="all">Tất cả nhóm</option>
+                {GRADES.map(g => <option key={g} value={g}>Nhóm {g}</option>)}
+                <option value="Kèm riêng">Kèm riêng</option>
+                <option value="Đã thôi học">Thôi học</option>
+              </select>
+            </div>
+
             <select 
               className="w-full bg-emerald-800 text-white border-2 border-emerald-700 rounded-2xl p-4 outline-none focus:border-emerald-400 font-bold transition appearance-none"
-              onChange={(e) => setSelectedStudent(students.find(s => s.stt === parseInt(e.target.value)) || null)}
+              value={selectedStudent?.stt || ''}
+              onChange={(e) => {
+                const id = parseInt(e.target.value);
+                setSelectedStudent(students.find(s => s.stt === id) || null);
+              }}
             >
-              <option value="">CHỌN HỌC SINH ĐỂ XEM CHI TIẾT</option>
-              {students.map(s => <option key={s.stt} value={s.stt}>{s.fullName} - {s.className}</option>)}
+              <option value="">CHỌN HỌC SINH ({filteredSelectionStudents.length})</option>
+              {filteredSelectionStudents.map(s => (
+                <option key={s.stt} value={s.stt}>{s.fullName} - {s.className} (N{s.grade})</option>
+              ))}
             </select>
             
             {selectedStudent && studentAnalysis ? (
-              <div className="animate-fadeIn space-y-6 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+              <div className="animate-fadeIn space-y-6 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar mt-4">
                 <div className="grid grid-cols-1 gap-4">
                   <div className="bg-emerald-800/50 p-5 rounded-2xl border border-emerald-700 flex justify-between items-center shadow-inner">
                     <span className="text-[10px] font-black uppercase text-emerald-400 tracking-wider">Ngày bắt đầu học:</span>
